@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Mail, MessageSquare, LogOut, Briefcase, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, Mail, MessageSquare, LogOut, Briefcase, Menu, X, Send } from 'lucide-react';
 
 const Layout = () => {
   const location = useLocation();
@@ -16,6 +16,7 @@ const Layout = () => {
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
     { name: 'Businesses', path: '/businesses', icon: Briefcase },
     { name: 'Campaigns', path: '/campaigns', icon: Mail },
+    { name: 'Bulk Mails', path: '/bulk-mails', icon: Send },
     { name: 'Inquiries', path: '/inquiries', icon: Users },
     { name: 'Chat', path: '/chat', icon: MessageSquare },
   ];

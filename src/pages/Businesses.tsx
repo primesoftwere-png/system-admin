@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import axiosClient from '../api/axiosClient';
 import { Table } from '../components/Table';
 import { Pagination } from '../components/Pagination';
-import { Briefcase, Filter, Search } from 'lucide-react';
+import { Briefcase, Filter, Search, Upload, X, Download, Plus } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface Business {
   _id: string;
@@ -13,6 +14,9 @@ interface Business {
   country: string;
   phoneNumber: string;
   isWeb: boolean;
+  rating?: number;
+  reviewCount?: number;
+  googleMapsUrl?: string;
 }
 
 const Businesses = () => {
@@ -20,7 +24,7 @@ const Businesses = () => {
   const [isLoading, setIsLoading] = useState(true);
   
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [limit, setLimit] = useState(50);
   const [paginationData, setPaginationData] = useState({ total: 0, totalPages: 1 });
 
   const [niches, setNiches] = useState<string[]>([]);
@@ -35,10 +39,72 @@ const Businesses = () => {
     city: '',
     country: '',
     isWeb: '',
-    isSend: ''
+    isSend: '',
+    rating: ''
   });
   
   const [debouncedFilters, setDebouncedFilters] = useState(filters);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importNiche, setImportNiche] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const initialAddBusinessData = {
+    name: '', niche: '', address: '', city: '', state: '', country: '',
+    email: '', phoneNumber: '', webUrl: '', isWeb: false, googleMapsUrl: '',
+    rating: 0, reviewCount: 0
+  };
+  const [addBusinessData, setAddBusinessData] = useState(initialAddBusinessData);
+
+  const handleImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importFile || !importNiche) return;
+    
+    setIsImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      formData.append('niche', importNiche);
+      
+      await axiosClient.post('/businesses/import', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      setIsImportModalOpen(false);
+      setImportFile(null);
+      setImportNiche('');
+      setRefreshTrigger(prev => prev + 1);
+    } catch (error: any) {
+      console.error('Error importing businesses:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to import businesses. Please check the console for details.';
+      toast.error(errorMessage);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleAddBusiness = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAdding(true);
+    try {
+      await axiosClient.post('/businesses', addBusinessData);
+      setIsAddModalOpen(false);
+      setAddBusinessData(initialAddBusinessData);
+      setRefreshTrigger(prev => prev + 1);
+    } catch (error: any) {
+      console.error('Error adding business:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to add business. Please check the console for details.';
+      toast.error(errorMessage);
+    } finally {
+      setIsAdding(false);
+    }
+  };
 
   useEffect(() => {
     const fetchFilterOptions = async () => {
@@ -56,7 +122,7 @@ const Businesses = () => {
       }
     };
     fetchFilterOptions();
-  }, []);
+  }, [refreshTrigger]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -88,7 +154,7 @@ const Businesses = () => {
     };
 
     fetchBusinesses();
-  }, [page, limit, debouncedFilters]);
+  }, [page, limit, debouncedFilters, refreshTrigger]);
 
   const handleLimitChange = (newLimit: number) => {
     setLimit(newLimit);
@@ -109,6 +175,15 @@ const Businesses = () => {
     },
     { header: 'Phone', cell: (item: Business) => item.phoneNumber || '-' },
     {
+      header: 'Rating (Reviews)',
+      cell: (item: Business) => (
+        <div className="flex items-center gap-1 text-sm">
+          <span className="font-medium text-slate-700">{item.rating || 0}</span>
+          <span className="text-slate-400">({item.reviewCount || 0})</span>
+        </div>
+      )
+    },
+    {
       header: 'Website',
       cell: (item: Business) => (
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
@@ -118,6 +193,16 @@ const Businesses = () => {
         </span>
       ),
     },
+    {
+      header: 'Google Link',
+      cell: (item: Business) => (
+        item.googleMapsUrl ? (
+          <a href={item.googleMapsUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline text-sm font-medium">
+            View on Maps
+          </a>
+        ) : '-'
+      )
+    }
   ];
 
   return (
@@ -132,6 +217,22 @@ const Businesses = () => {
             <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Businesses</h1>
             <p className="text-sm text-slate-400">Manage all registered businesses</p>
           </div>
+        </div>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors flex items-center gap-2 flex-1 sm:flex-none justify-center"
+          >
+            <Plus className="w-4 h-4" />
+            Manually Add
+          </button>
+          <button
+            onClick={() => setIsImportModalOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2 flex-1 sm:flex-none justify-center"
+          >
+            <Upload className="w-4 h-4" />
+            Import
+          </button>
         </div>
       </div>
 
@@ -190,7 +291,7 @@ const Businesses = () => {
             <option value="">All Countries</option>
             {countries.map((c, i) => <option key={i} value={c}>{c}</option>)}
           </select>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <select
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
               value={filters.isWeb}
@@ -208,6 +309,15 @@ const Businesses = () => {
               <option value="">Send: All</option>
               <option value="true">Sent</option>
               <option value="false">Not Sent</option>
+            </select>
+            <select
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+              value={filters.rating}
+              onChange={(e) => setFilters(prev => ({ ...prev, rating: e.target.value }))}
+            >
+              <option value="">Rating: All</option>
+              <option value="high">High</option>
+              <option value="low">Low</option>
             </select>
           </div>
         </div>
@@ -230,6 +340,162 @@ const Businesses = () => {
           ) : undefined
         }
       />
+
+      {/* Import Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-fade-in-up">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-800">Import Businesses</h3>
+              <button
+                onClick={() => setIsImportModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleImport} className="p-4 space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-slate-700">
+                    Excel File
+                  </label>
+                  <a
+                    href="http://localhost:3000/api/businesses/import/template"
+                    download="template.xlsx"
+                    className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-md transition-colors"
+                  >
+                    <Download className="w-3 h-3" />
+                    Download Template
+                  </a>
+                </div>
+                <input
+                  type="file"
+                  accept=".xlsx, .xls, .csv"
+                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                  className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 border border-slate-200 rounded-lg p-2"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Niche Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Plumbers"
+                  value={importNiche}
+                  onChange={(e) => setImportNiche(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                  required
+                />
+              </div>
+              
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isImporting || !importFile || !importNiche}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isImporting ? 'Importing...' : 'Import'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Business Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl my-auto animate-fade-in-up">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-800">Add Business</h3>
+              <button
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddBusiness} className="p-4 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Business Name</label>
+                  <input type="text" value={addBusinessData.name} onChange={e => setAddBusinessData({...addBusinessData, name: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Niche</label>
+                  <input type="text" value={addBusinessData.niche} onChange={e => setAddBusinessData({...addBusinessData, niche: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" required />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
+                  <input type="text" value={addBusinessData.address} onChange={e => setAddBusinessData({...addBusinessData, address: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">City</label>
+                  <input type="text" value={addBusinessData.city} onChange={e => setAddBusinessData({...addBusinessData, city: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">State</label>
+                  <input type="text" value={addBusinessData.state} onChange={e => setAddBusinessData({...addBusinessData, state: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Country</label>
+                  <input type="text" value={addBusinessData.country} onChange={e => setAddBusinessData({...addBusinessData, country: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                  <input type="email" value={addBusinessData.email} onChange={e => setAddBusinessData({...addBusinessData, email: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
+                  <input type="text" value={addBusinessData.phoneNumber} onChange={e => setAddBusinessData({...addBusinessData, phoneNumber: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Website URL</label>
+                  <input type="url" value={addBusinessData.webUrl} onChange={e => setAddBusinessData({...addBusinessData, webUrl: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Google Maps URL</label>
+                  <input type="url" value={addBusinessData.googleMapsUrl} onChange={e => setAddBusinessData({...addBusinessData, googleMapsUrl: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Rating</label>
+                  <input type="number" step="0.1" value={addBusinessData.rating} onChange={e => setAddBusinessData({...addBusinessData, rating: parseFloat(e.target.value) || 0})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Review Count</label>
+                  <input type="number" value={addBusinessData.reviewCount} onChange={e => setAddBusinessData({...addBusinessData, reviewCount: parseInt(e.target.value) || 0})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                </div>
+                <div className="flex items-center sm:mt-7">
+                  <input type="checkbox" id="isWeb" checked={addBusinessData.isWeb} onChange={e => setAddBusinessData({...addBusinessData, isWeb: e.target.checked})} className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500" />
+                  <label htmlFor="isWeb" className="ml-2 text-sm font-medium text-slate-700">Has Website?</label>
+                </div>
+              </div>
+              
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
+                <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" disabled={isAdding} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isAdding ? 'Adding...' : 'Add Business'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
